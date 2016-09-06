@@ -743,50 +743,51 @@ def single_trial_power(data, sfreq, frequencies, use_fft=True, n_cycles=7,
 
 # Aux function to reduce redundancy between tfr_morlet and tfr_multitaper
 
-def _tfr_aux(method, inst, freqs, decim, return_itc, picks, average,
+def _tfr_aux(method, inst, freqs, decim, return_phase, picks, average,
              **tfr_params):
     decim = _check_decim(decim)
-    data = _get_data(inst, return_itc)
+    data = _get_data(inst, return_phase)
     info = inst.info
 
     info, data, picks = _prepare_picks(info, data, picks)
     data = data[:, picks, :]
 
     if average:
-        if return_itc:
+        if return_phase:
             output = 'avg_power_itc'
         else:
             output = 'avg_power'
     else:
-        output = 'power'
-        if return_itc:
-            raise ValueError('Inter-trial coherence is not supported'
-                             ' with average=False')
+        if return_phase:
+            output = 'phase'
+        else:
+            output = 'power'
 
     out = _compute_tfr(data, freqs, info['sfreq'], method=method,
                        output=output, decim=decim, **tfr_params)
     times = inst.times[decim].copy()
 
     if average:
-        if return_itc:
+        if return_phase:
             power, itc = out.real, out.imag
         else:
             power = out
         nave = len(data)
         out = AverageTFR(info, power, times, freqs, nave,
                          method='%s-power' % method)
-        if return_itc:
+        if return_phase:
             out = (out, AverageTFR(info, itc, times, freqs, nave,
                                    method='%s-itc' % method))
     else:
-        power = out
-        out = EpochsTFR(info, power, times, freqs, method='%s-power' % method)
+        power_or_phase = out
+        out = EpochsTFR(info, power_or_phase, times, freqs,
+                        method='%s-%s' % (method, output) )
 
     return out
 
 
 @verbose
-def tfr_morlet(inst, freqs, n_cycles, use_fft=False, return_itc=True, decim=1,
+def tfr_morlet(inst, freqs, n_cycles, use_fft=False, return_phase=True, decim=1,
                n_jobs=1, picks=None, zero_mean=True, average=True,
                verbose=None):
     """Compute Time-Frequency Representation (TFR) using Morlet wavelets
@@ -801,7 +802,7 @@ def tfr_morlet(inst, freqs, n_cycles, use_fft=False, return_itc=True, decim=1,
         The number of cycles globally or for each frequency.
     use_fft : bool, defaults to False
         The fft based convolution or not.
-    return_itc : bool, defaults to True
+    return_phase : bool, defaults to True
         Return inter-trial coherence (ITC) as well as averaged power.
         Must be ``False`` for evoked data.
     decim : int | slice, defaults to 1
@@ -848,7 +849,7 @@ def tfr_morlet(inst, freqs, n_cycles, use_fft=False, return_itc=True, decim=1,
 
 @verbose
 def tfr_multitaper(inst, freqs, n_cycles, time_bandwidth=4.0,
-                   use_fft=True, return_itc=True, decim=1,
+                   use_fft=True, return_phase=True, decim=1,
                    n_jobs=1, picks=None, average=True, verbose=None):
     """Compute Time-Frequency Representation (TFR) using DPSS tapers.
 
@@ -870,7 +871,7 @@ def tfr_multitaper(inst, freqs, n_cycles, time_bandwidth=4.0,
         If time_bandwidth = 4., then frequency smoothing is (4 / time) = 8 Hz.
     use_fft : bool, defaults to True
         The fft based convolution or not.
-    return_itc : bool, defaults to True
+    return_phase : bool, defaults to True
         Return inter-trial coherence (ITC) as well as averaged power.
     decim : int | slice, defaults to 1
         To reduce memory usage, decimation factor after time-frequency
@@ -910,7 +911,7 @@ def tfr_multitaper(inst, freqs, n_cycles, time_bandwidth=4.0,
     """
     tfr_params = dict(n_cycles=n_cycles, n_jobs=n_jobs, use_fft=use_fft,
                       zero_mean=True, time_bandwidth=time_bandwidth)
-    return _tfr_aux('multitaper', inst, freqs, decim, return_itc, picks,
+    return _tfr_aux('multitaper', inst, freqs, decim, return_phase, picks,
                     average, **tfr_params)
 
 
@@ -975,7 +976,7 @@ class _BaseTFR(ContainsMixin, UpdateChannelsMixin, SizeMixin):
         Returns
         -------
         inst : instance of AverageTFR
-            The modified instance.        
+            The modified instance.
 
         """  # noqa
         self.data = rescale(self.data, self.times, baseline, mode,
