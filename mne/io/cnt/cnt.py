@@ -235,7 +235,10 @@ def _get_cnt_info(input_fname, eog, ecg, emg, misc, data_format, date_format):
             event_bytes = 8
         elif event_type == 2:
             event_bytes = 19
+        elif event_type == 3:
+            event_bytes = 19
         else:
+            print event_type, event_size
             raise IOError('Unexpected event size.')
 
         n_events = event_size // event_bytes
